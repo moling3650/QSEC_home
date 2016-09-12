@@ -77,15 +77,23 @@ class Model(dict, metaclass=ModelMetaclass):
                 logging.debug('using default value for %s' %s (key, str(value)))
                 setattr(self, key, value)
             return value
-
+    #find method    user = yield from User.find('123)
     @classmethod
     @asyncio.coroutine
     def find(cls, pk):
-        pass
+        'find object by primary key'
+        rs = yield from select('%s where `%s`=?' %s (cls.__select__.primary_key__),[pk], 1)
+        if len(rs) == 0:
+            return None
+        return cls(**rs[0])
 
     @asyncio.coroutine
     def save(self):
-        pass
+        args = list(map(self.getValueOrDefault, self.__fields__))
+        args.append(self.getValueOrDefault(self.__primary_key__))
+        rows =- yield from execute(self.__insert__, args)
+        if rows != 1:
+            logging.warning('faliure to insert record: affected rows: %s' % rows)
 
 #Field Class
 class Field(object):
