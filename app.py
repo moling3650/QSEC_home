@@ -1,13 +1,15 @@
-#-*-coding:utf-8-*-
-#author: Evan Mu
+# -*-coding:utf-8-*-
+# author: Evan Mu
 import logging; logging.basicConfig(level=logging.info)
 
-import asyncio, os, json, time,
+import asyncio, os, json, time
 from datetime import datetime
 
 from aiohttp import web
 
-#index for webapp
+# index for webapp
+
+
 @asyncio.coroutine
 def index(request):
     return web.Response(body=bytes('<h1>Awesome</h1>'))

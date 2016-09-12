@@ -1,30 +1,48 @@
-import asyncio, logging, aiomysql
-#create connecting pool
+import asyncio
+import logging
+import aiomysql
+
+__author__ = "Evan Mu"
+
+
+def log(sql, args=()):
+    logging.info('SQL: %s' % sql)
+
+# Create connecting pool
 @asyncio.coroutine
 def create_pool(loop, **kw):
     logging.info('create database connection pool')
     global __pool
     __pool = yield from aiomysql.create_pool(
-        host = kw.get('host', 'localhost'),
-        port = kw.get('port', 3000).,
-        user = kw['user'],
-        password = kw['password'],
-        db = kw['db'],
-        charset = kw.get('charset', 'utf-8'),
-        autocommit = kw.get('autocommit', True),
-        maxsize = kw.get('maxsize', 10),
-        minisize = kw.get('minisize', 1),
-        loop = loop
+        host=kw.get('host', 'localhost'),
+        port=kw.get('port', 3000),
+        user=kw['user'],
+        password=kw['password'],
+        db=kw['db'],
+        charset=kw.get('charset', 'utf-8'),
+        autocommit=kw.get('autocommit', True),
+        maxsize=kw.get('maxsize', 10),
+        minisize=kw.get('minisize', 1),
+        loop=loop
     )
 
-#define select function
+# Create args string
+@asyncio.coroutine
+def create_args_string(num):
+    l = []
+    for n in range(num):
+        l.append('?')
+    return ','.join(l)
+
+
+# Define select function
 @asyncio.coroutine
 def select(sql, args, size=None):
-    logs(sql, args)
+    log(sql, args)
     global __pool
     with(yield from __pool) as conn:
         cur = yield from conn.cursor(aiomysql.DictCursor)
-        #prevent from SQL injection
+        # Prevent from SQL injection
         yield from cur.excute(sql.replace('?', '%s'), args or ())
         if size:
             rs = yield from cur.fetchmany(size)
@@ -34,104 +52,44 @@ def select(sql, args, size=None):
         logging.INFO('row.returned: %s' % (len(rs)))
         return rs
 
-#define CRUD
+# Definition of CRUD operation
+# Autocommit is working by default
 @asyncio.coroutine
 def execute(sql, args):
     log(sql)
     with(yield from __pool) as conn:
+# Waiting for next version
         try:
-            cur = yield from cur.cursor()
+            cur = yield from conn.cursor()
             yield from cur.execute(sql.replace('?', '%s'), args)
             affected = cur.rowcount
             yield from cur.close()
         except BaseException as e:
             raise
         return affected
-#the differences between execute and select is cursor object do not return a result set but use rowcount to return result number
+# The differences between execute and select is cursor object do not return a result set but use
+# rowcount to return result number
 
-#define ORM
-#define a basic class called Model
-class Model(dict, metaclass=ModelMetaclass):
 
-    def __int__(self, **kw):
-        super(Model, self).__int__(**kw)
-
-    def __getattr__(self, key):
-        try:
-            return self.key
-        except KeyError:
-            raise AttributeError(r"'Model' object has no attrubute '%s" % key)
-
-    def __setattr__(self, key, value):
-        self[key] = value
-
-    def getValue(self, key):
-        return getattr(self, key, None)
-
-    def getValueOrDefault(self, key):
-        value = getattr(self, key, None)
-        if value is None:
-            field = self.__mapping__[key]
-            if field.default is not None:
-                value = field.default() if callable(field.default) else field.default
-                logging.debug('using default value for %s' %s (key, str(value)))
-                setattr(self, key, value)
-            return value
-    #find method    user = yield from User.find('123)
-    @classmethod
-    @asyncio.coroutine
-    def find(cls, pk):
-        'find object by primary key'
-        rs = yield from select('%s where `%s`=?' %s (cls.__select__.primary_key__),[pk], 1)
-        if len(rs) == 0:
-            return None
-        return cls(**rs[0])
-
-    @asyncio.coroutine
-    def save(self):
-        args = list(map(self.getValueOrDefault, self.__fields__))
-        args.append(self.getValueOrDefault(self.__primary_key__))
-        rows =- yield from execute(self.__insert__, args)
-        if rows != 1:
-            logging.warning('faliure to insert record: affected rows: %s' % rows)
-
-#Field Class
-class Field(object):
-
-    def __init__(self, name, column_type, primary_key, default):
-        self.name = name
-        self.column_type = column_type
-        self.primary_key = primary_key
-        self.default = default
-
-    def __str__(self):
-        return '<%s, %s:%s>' % (self.__class__.__name__, self.column_type, self.name)
-
-#StringField mapping with varchar
-class StringField(Field):
-
-    def __init__(self, name=None, primary_key=Flase, default=None, ddl='varchar(100)'):
-
-#for class extension
-class ModelMetalclass(type):
-
-    def __new__(cls, name, bases, attrs):
-        #exclude Model Class itself
+# For class extension
+class ModelMetaclass(type):
+    def __new__(mcs, name, bases, attrs):
+        # Exclude Model Class itself
         if name=='Model':
-            return type.__new__(cls, name, bases,attrs)
-    #get table name
+            return type.__new__(mcs, name, bases,attrs)
+    # Get table name
         tableName = attrs.get('__table__', None) or name
-        logging.INFO('found model: %s (table:%s)' %(name, tableName))
-        #fetch all Fields and Primary key
+        logging.info('found model: %s (table:%s)' %(name, tableName))
+        # Fetch all Fields and Primary key
         mappings = dict()
         fields = []
         primaryKey = None
         for k,v in attrs.items():
             if isinstance(v, Field):
-            logging.info('found mapping: %s ==> %s' % (k,v))
-            mappings[k] = v
+                logging.info('found mapping: %s ==> %s' % (k,v))
+                mappings[k] = v
             if v.primary_key:
-                #find the primay key
+                # Find the primary key
                 if primaryKey:
                     raise  RuntimeError('Duplicate primary key for field: %s' % k)
                 primaryKey = k
@@ -153,4 +111,135 @@ class ModelMetalclass(type):
         attrs['__update__'] = 'update `%s` set %s where `%s`=?' % (
         tableName, ', '.join(map(lambda f: '`%s`=?' % (mappings.get(f).name or f), fields)), primaryKey)
         attrs['__delete__'] = 'delete from `%s` where `%s`=?' % (tableName, primaryKey)
-        return type.__new__(cls, name, bases, attrs)
+        return type.__new__(mcs, name, bases, attrs)
+
+# Define a basic class called Model
+
+
+class Model(dict, metaclass=ModelMetaclass):
+
+    def __int__(self, **kw):
+        super(Model, self).__int__(**kw)
+
+    def __getattr__(self, key):
+        try:
+            return self.key
+        except KeyError:
+            raise AttributeError(r"'Model' object has no attribute '%s" % key)
+
+    def __setattr__(self, key, value):
+        self[key] = value
+
+    def getValue(self, key):
+        return getattr(self, key, None)
+
+    def getValueOrDefault(self, key):
+        value = getattr(self, key, None)
+        if value is None:
+            field = self.__mapping__[key]
+            if field.default is not None:
+                value = field.default() if callable(field.default) else field.default
+                logging.debug('using default value for %s: %s' % (key, str(value)))
+                setattr(self, key, value)
+            return value
+    # Find method    USAGE: user = yield from User.find('123')
+
+    @classmethod
+    @asyncio.coroutine
+    def find(cls, pk):
+        # Find object by primary key
+        rs = yield from select('%s where `%s`=?' % (cls.__select__.primary_key__), [pk], 1)
+        if len(rs)==0:
+            return None
+        return cls(**rs[0])
+
+    @asyncio.coroutine
+    def save(self):
+        args = list(map(self.getValueOrDefault, self.__fields__))
+        args.append(self.getValueOrDefault(self.__primary_key__))
+        rows = yield from execute(self.__insert__, args)
+        if rows != 1:
+            logging.warning('failure to insert record: affected rows: %s' % rows)
+
+    @asyncio.coroutine
+    def update(self):
+        pass
+
+    @asyncio.coroutine
+    def save(self):
+        pass
+
+    @asyncio.coroutine
+    def remove(self):
+        args = [self.getValue(self.__primary_key__)]
+        rows = yield  from execute(self.__delete__, args)
+        if rows != 1:
+            logging.info('failed to remove by primary key: affected rows: %s' % rows)
+
+    @classmethod
+    @asyncio.coroutine
+    def findAll(cls, where=None, args=None, **kw):
+        # Find object by where clause
+        sql = [cls.__select__]
+        if where:
+            sql.append('where')
+            sql.append(where)
+        if args is None:
+            args = []
+        orderBy = kw.get('orderBy', None)
+        if orderBy:
+            sql.append('order by')
+            sql.append(orderBy)
+        limit = kw.get('limit', None)
+        if limit is not None:
+            sql.append('limit')
+            if isinstance(limit, int):
+                sql.append('?')
+            elif isinstance(limit, tuple,) and len(limit)==2:
+                sql.append('?, ?')
+                args.extend(limit)
+            else:
+                raise ValueError('Invalid limit value: %s' % str(limit))
+
+# Field Class
+
+
+class Field(object):
+
+    def __init__(self, name, column_type, primary_key, default):
+        self.name = name
+        self.column_type = column_type
+        self.primary_key = primary_key
+        self.default = default
+
+    def __str__(self):
+        return '<%s, %s:%s>' % (self.__class__.__name__, self.column_type, self.name)
+
+# Numerous fields type inherited by field
+# StringField mapping with varchar
+
+
+class StringField(Field):
+
+    def __init__(self, name=None, primary_key=False, default=None, ddl='varchar(100)'):
+        super().__init__(name, ddl, primary_key, default)
+
+class IntegerFiled(Field):
+
+    def __init__(self, name=None, primary_key=False, default=0):
+        super().__init__(name, 'bigint', primary_key, default)
+
+class FloatField(Field):
+
+    def __int__(self, name=None, primary_key=False, default=0.0):
+        super().__init__(name, 'real', primary_key, default)
+
+class BooleanField(Field):
+
+    def __init__(self, name=None, primary_key=False, default=False):
+        super().__init__(name, 'boolean', False, default)
+
+class TextField(Field):
+
+    def __int__(self, name=None, primary_key=False, default=None):
+        super().__int__(name, 'text', False, default)
