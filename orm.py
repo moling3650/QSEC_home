@@ -163,11 +163,20 @@ class Model(dict, metaclass=ModelMetaclass):
 
     @asyncio.coroutine
     def update(self):
-        pass
+        args = list(map(self.getValue(self.__fields__)))
+        args.append(self.getValue(self.__primary_key__))
+        rows = yield from execute(self.__update__, args)
+        if rows != 1:
+            logging.warning('failed to update by primary key: affected rows: %s' % rows)
 
     @asyncio.coroutine
     def save(self):
-        pass
+        args = list(map(self.getValueOrDefault, self.__fields__))
+        args.append(self.getValue(self.__primar_key__))
+        rows = yield from execute(self.__insert__, args)
+        if rows != 1:
+            logging.warning('failed to save by primary key: affected rows: %s' % rows)
+
 
     @asyncio.coroutine
     def remove(self):
