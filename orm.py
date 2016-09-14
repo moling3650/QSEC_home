@@ -9,11 +9,11 @@ def log(sql, args=()):
     logging.info('SQL: %s' % sql)
 
 # Create connecting pool
-@asyncio.coroutine
-def create_pool(loop, **kw):
+
+async def create_pool(loop, **kw):
     logging.info('create database connection pool')
     global __pool
-    __pool = yield from aiomysql.create_pool(
+    __pool = await aiomysql.create_pool(
         host=kw.get('host', 'localhost'),
         port=kw.get('port', 3000),
         user=kw['user'],
@@ -27,8 +27,7 @@ def create_pool(loop, **kw):
     )
 
 # Create args string
-@asyncio.coroutine
-def create_args_string(num):
+async def create_args_string(num):
     l = []
     for n in range(num):
         l.append('?')
@@ -36,34 +35,32 @@ def create_args_string(num):
 
 
 # Define select function
-@asyncio.coroutine
-def select(sql, args, size=None):
+async def select(sql, args, size=None):
     log(sql, args)
     global __pool
-    with(yield from __pool) as conn:
-        cur = yield from conn.cursor(aiomysql.DictCursor)
+    with(await __pool) as conn:
+        cur = await conn.cursor(aiomysql.DictCursor)
         # Prevent from SQL injection
-        yield from cur.excute(sql.replace('?', '%s'), args or ())
+        await cur.excute(sql.replace('?', '%s'), args or ())
         if size:
-            rs = yield from cur.fetchmany(size)
+            rs = await cur.fetchmany(size)
         else:
-            rs = yield from cur.fetchall()
-        yield from cur.close()
+            rs = await cur.fetchall()
+        await cur.close()
         logging.INFO('row.returned: %s' % (len(rs)))
         return rs
 
 # Definition of CRUD operation
 # Autocommit is working by default
-@asyncio.coroutine
-def execute(sql, args):
+async def execute(sql, args):
     log(sql)
-    with(yield from __pool) as conn:
+    with(await __pool) as conn:
 # Waiting for next version
         try:
-            cur = yield from conn.cursor()
-            yield from cur.execute(sql.replace('?', '%s'), args)
+            cur = await conn.cursor()
+            await cur.execute(sql.replace('?', '%s'), args)
             affected = cur.rowcount
-            yield from cur.close()
+            await cur.close()
         except BaseException as e:
             raise
         return affected
@@ -142,52 +139,46 @@ class Model(dict, metaclass=ModelMetaclass):
                 logging.debug('using default value for %s: %s' % (key, str(value)))
                 setattr(self, key, value)
             return value
-    # Find method    USAGE: user = yield from User.find('123')
+    # Find method    USAGE: user = await User.find('123')
 
     @classmethod
-    @asyncio.coroutine
-    def find(cls, pk):
+    async def find(cls, pk):
         # Find object by primary key
-        rs = yield from select('%s where `%s`=?' % (cls.__select__.primary_key__), [pk], 1)
+        rs = await select('%s where `%s`=?' % (cls.__select__.primary_key__), [pk], 1)
         if len(rs)==0:
             return None
         return cls(**rs[0])
 
-    @asyncio.coroutine
-    def save(self):
+    async def save(self):
         args = list(map(self.getValueOrDefault, self.__fields__))
         args.append(self.getValueOrDefault(self.__primary_key__))
-        rows = yield from execute(self.__insert__, args)
+        rows = await execute(self.__insert__, args)
         if rows != 1:
             logging.warning('failure to insert record: affected rows: %s' % rows)
 
-    @asyncio.coroutine
-    def update(self):
+    async def update(self):
         args = list(map(self.getValue(self.__fields__)))
         args.append(self.getValue(self.__primary_key__))
-        rows = yield from execute(self.__update__, args)
+        rows = await execute(self.__update__, args)
         if rows != 1:
             logging.warning('failed to update by primary key: affected rows: %s' % rows)
 
-    @asyncio.coroutine
-    def save(self):
+    async def save(self):
         args = list(map(self.getValueOrDefault, self.__fields__))
         args.append(self.getValue(self.__primar_key__))
-        rows = yield from execute(self.__insert__, args)
+        rows = await execute(self.__insert__, args)
         if rows != 1:
             logging.warning('failed to save by primary key: affected rows: %s' % rows)
 
 
-    @asyncio.coroutine
-    def remove(self):
+    async def remove(self):
         args = [self.getValue(self.__primary_key__)]
-        rows = yield  from execute(self.__delete__, args)
+        rows = await execute(self.__delete__, args)
         if rows != 1:
             logging.info('failed to remove by primary key: affected rows: %s' % rows)
 
     @classmethod
-    @asyncio.coroutine
-    def findAll(cls, where=None, args=None, **kw):
+    async def findAll(cls, where=None, args=None, **kw):
         # Find object by where clause
         sql = [cls.__select__]
         if where:
