@@ -9,7 +9,6 @@ def log(sql, args=()):
     logging.info('SQL: %s' % sql)
 
 # Create connecting pool
-
 async def create_pool(loop, **kw):
     logging.info('create database connection pool')
     global __pool
@@ -25,6 +24,13 @@ async def create_pool(loop, **kw):
         minisize=kw.get('minisize', 1),
         loop=loop
     )
+
+# Destroy connecting pool
+async def destroy_pool():
+    global  __pool
+    if __pool is not None:
+        __pool.closed()
+        await __pool.wait_closed()
 
 # Create args string
 async def create_args_string(num):
