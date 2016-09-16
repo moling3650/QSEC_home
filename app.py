@@ -9,9 +9,7 @@ from aiohttp import web
 
 # index for webapp
 
-
-@asyncio.coroutine
-def index(request):
+async def index(request):
     return web.Response(body=bytes('<h1>Awesome</h1>'))
 
 async def init(loop):
