@@ -142,29 +142,24 @@ def add_static(app):
     logging.info('add static %s => %s' % ('/static', path))
 
 
-def add_route(app, fn):
-    method = getattr(fn, '__method__', None)
-    path = getattr(fn, '__route__', None)
-    if path is None or method is None:
-        raise ValueError('@get or @post is not defined in %s' % str(fn))
-    if not asyncio.iscoroutine(fn) and not inspect.iscoroutine(fn):
-        fn = asyncio.coroutine(fn)
-    logging.info('add route %s %s => %s(%s)' % (method, path, fn.__name__, ','.join(inspect.signature(fn).parameters.keys())))
-
-
 def add_routes(app, module_name):
-    n = module_name.rfind('.')
-    if n==(-1):
+    try:
         mod = __import__(module_name, globals(), locals())
-    else:
-        name = module_name[n+1:]
+    except ImportError as e:
+        raise e
         mod = getattr(__import__(module_name, globals(), locals(), [name]), name)
     for attr in dir(mod):
+        # If the argument startswith '_',we should ignore it
         if attr.startswith('_'):
             continue
+        # When the module_name doesn't startswith '_'
         fn = getattr(mod, attr)
+        # If attr is callable,it must be a method
         if callable(fn):
             method = getattr('__method__', None)
             path = getattr(fn, '__route__', None)
             if method and path:
-                add_route(app, fn)
+                fn = asyncio.coroutine(fn)
+                args = ','.join(inspect.signature(fn).parameters.keys())
+                app.router.add_route(method, path, RequestHandler(fn))
+
