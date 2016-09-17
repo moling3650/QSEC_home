@@ -32,14 +32,6 @@ async def destroy_pool():
         __pool.closed()
         await __pool.wait_closed()
 
-# Create args string
-async def create_args_string(num):
-    l = []
-    for n in range(num):
-        l.append('?')
-    return ','.join(l)
-
-
 # Define select function
 async def select(sql, args, size=None):
     log(sql, args)
@@ -110,7 +102,7 @@ class ModelMetaclass(type):
         # construct default SELECT, INSERT, UPDATE DELETE:
         attrs['__select__'] = 'select `%s`, %s from `%s`' % (primaryKey, ', '.join(escaped_fields), tableName)
         attrs['__insert__'] = 'insert into `%s` (%s, `%s`) values (%s)' % (
-        tableName, ', '.join(escaped_fields), primaryKey, create_args_string(len(escaped_fields) + 1))
+        tableName, ', '.join(escaped_fields), primaryKey, ', '.join('?' * len(mappings)))
         attrs['__update__'] = 'update `%s` set %s where `%s`=?' % (
         tableName, ', '.join(map(lambda f: '`%s`=?' % (mappings.get(f).name or f), fields)), primaryKey)
         attrs['__delete__'] = 'delete from `%s` where `%s`=?' % (tableName, primaryKey)
