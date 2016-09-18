@@ -144,10 +144,10 @@ def add_static(app):
 
 def add_routes(app, module_name):
     try:
-        mod = __import__(module_name, globals(), locals())
+        mod = __import__(module_name, fromlist=[''])
     except ImportError as e:
         raise e
-        mod = getattr(__import__(module_name, globals(), locals(), [name]), name)
+        
     for attr in dir(mod):
         # If the argument startswith '_',we should ignore it
         if attr.startswith('_'):
