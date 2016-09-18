@@ -75,8 +75,7 @@ def has_var_kw_arg(fn):
 
 class RequestHandler(object):
 
-    def __init__(self, app, fn):
-        self._app = app
+    def __init__(self, fn):
         self._func = fn
         self._has_request_arg = has_request_arg(fn)
         self._has_var_kw_arg = has_var_kw_arg(fn)
