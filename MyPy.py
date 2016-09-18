@@ -76,8 +76,7 @@ def has_var_kw_arg(fn):
 
 class RequestHandler(object):
 
-    def __init__(self, app, fn):
-        self._app = app
+    def __init__(self, fn):
         self._func = fn
         self._has_request_arg = has_request_arg(fn)
         self._has_var_kw_arg = has_var_kw_arg(fn)
@@ -87,7 +86,7 @@ class RequestHandler(object):
 
     async def __call__(self, request):
         kw = None
-        if self._has_var_kw_arg or self._has_named_kw_args or self._required_kw_args:
+        if self._has_var_kw_arg or self._has_named_kw_args:
             if request.method == 'POST':
                 if not request.content_type:
                     return web.HTTPBadRequest('Missing Content-Type.')
@@ -145,10 +144,10 @@ def add_static(app):
 
 def add_routes(app, module_name):
     try:
-        mod = __import__(module_name, globals(), locals())
+        mod = __import__(module_name, fromlist=[''])
     except ImportError as e:
         raise e
-        mod = getattr(__import__(module_name, globals(), locals(), [name]), name)
+        
     for attr in dir(mod):
         # If the argument startswith '_',we should ignore it
         if attr.startswith('_'):
