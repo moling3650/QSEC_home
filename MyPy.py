@@ -8,29 +8,23 @@ from api import APIError
 
 # For the sake of the readablity if code,use decorator such as @get
 
+# 工厂模式，生成GET、POST等请求方法的装饰器
+def request_type(method):
+    def _request(path):
+        def decorator(func):
+            @functools.wraps(func)
+            def wrapper(*args, **kw):
+                return func(*args, **kw)
+            wrapper.__method__ = method.upper()
+            wrapper.__route__ = path
+            return wrapper
+        return decorator
+    return _request
 
-def get(path):
-
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kw):
-            return func(*args, **kw)
-        wrapper.__method__ = 'GET'
-        wrapper.__route__ = path
-        return wrapper
-    return decorator
-
-
-def post(path):
-
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kw):
-            return func(*args, **kw)
-        wrapper.__method__ = 'GET'
-        wrapper.__route__ = path
-        return wrapper
-    return decorator
+get = request_type('get')
+post = request_type('post')
+put = request_type('put')
+delete = request_type('delete')
 
 
 def get_required_kw_args(fn):
